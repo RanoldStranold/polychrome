@@ -1,0 +1,12 @@
+{
+  "itemGroup.polychrome-testblocks": "Test Lights",
+  "block.polychrome-testblocks.red_test_light": "Red Test Light",
+  "block.polychrome-testblocks.orange_test_light": "Orange Test Light",
+  "block.polychrome-testblocks.yellow_test_light": "Yellow Test Light",
+  "block.polychrome-testblocks.green_test_light": "Green Test Light",
+  "block.polychrome-testblocks.cyan_test_light": "Cyan Test Light",
+  "block.polychrome-testblocks.blue_test_light": "Blue Test Light",
+  "block.polychrome-testblocks.purple_test_light": "Purple Test Light",
+  "block.polychrome-testblocks.magenta_test_light": "Magenta Test Light",
+  "block.polychrome-testblocks.white_test_light": "White Test Light"
+}

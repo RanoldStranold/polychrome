@@ -1,0 +1,19 @@
+{
+  "replace": false,
+  "sets": {
+    "test_orange": "#FF8000",
+    "test_green": "@test_green_base",
+    "test_green_base": "#20FF40"
+  },
+  "colors": {
+    "polychrome-testblocks:red_test_light": "#FF2020",
+    "polychrome-testblocks:orange_test_light": "@test_orange",
+    "polychrome-testblocks:yellow_test_light": { "texture": "polychrome-testblocks:block/yellow_test_light" },
+    "polychrome-testblocks:green_test_light": { "set": "test_green" },
+    "polychrome-testblocks:cyan_test_light": "#20E0FF",
+    "polychrome-testblocks:blue_test_light": { "texture": "polychrome-testblocks:block/blue_test_light", "region": [4, 4, 2, 2] },
+    "polychrome-testblocks:purple_test_light": "#9030FF",
+    "polychrome-testblocks:magenta_test_light": { "color": "#FF30D0" },
+    "polychrome-testblocks:white_test_light": { "texture": "polychrome-testblocks:textures/block/white_test_light.png" }
+  }
+}

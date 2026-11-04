@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "polychrome-gametest",
+  "version": "1.0",
+  "name": "Polychrome Game Tests",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "net.ranold.polychrome.gametest.NetherAndReachGameTest",
+      "net.ranold.polychrome.gametest.PolychromeGameTest",
+      "net.ranold.polychrome.gametest.SurfaceLavaGameTest",
+      "net.ranold.polychrome.gametest.WallTorchGameTest",
+      "net.ranold.polychrome.gametest.TestLightsGameTest",
+      "net.ranold.polychrome.gametest.ResourceReloadGameTest",
+      "net.ranold.polychrome.gametest.VoxyFarGameTest",
+      "net.ranold.polychrome.gametest.VoxyChunkyGameTest",
+      "net.ranold.polychrome.gametest.DynamicLightsGameTest",
+      "net.ranold.polychrome.gametest.PerformanceGameTest"
+    ]
+  },
+  "depends": {
+    "polychrome": "*"
+  }
+}

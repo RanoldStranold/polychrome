@@ -1,0 +1,186 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.19.3'
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+// Dev-only: a scripted client that builds lit scenes and screenshots them, so the effect can be
+// checked without driving the game by hand. Nothing here ships in the jar.
+// Run with `gradlew runClientGameTest`; screenshots land in build/run/clientGameTest/screenshots.
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "polychrome-gametest"
+        enableGameTests = false
+        enableClientGameTests = true
+        eula = true
+    }
+}
+
+// Dev-only: rainbow light blocks for checking colors by hand (creative tab "Test Lights"). A mod
+// that adds blocks must also be on the server, so these stay out of the client-only jar and are
+// loaded only by `gradlew runClient`.
+sourceSets {
+    testblocks {
+        compileClasspath += main.compileClasspath + main.output
+        runtimeClasspath += main.runtimeClasspath + main.output
+    }
+}
+
+loom {
+    mods {
+        "polychrome" {
+            sourceSet sourceSets.main
+        }
+        "polychrome-testblocks" {
+            sourceSet sourceSets.testblocks
+        }
+    }
+    runs {
+        client {
+            source sourceSets.testblocks
+        }
+    }
+}
+
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Modrinth"
+                url = "https://api.modrinth.com/maven"
+            }
+        }
+        filter {
+            includeGroup "maven.modrinth"
+        }
+    }
+}
+
+configurations {
+    lambDynLights
+}
+
+def lambDynLightsNested = tasks.register("lambDynLightsNested", Sync) {
+    from({ zipTree(configurations.lambDynLights.singleFile).matching { include "META-INF/jars/*.jar" }.files })
+    into layout.buildDirectory.dir("lambdynlights-nested")
+}
+
+dependencies {
+    // To change the versions see the gradle.properties file
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    // The game tests can place the rainbow test lights too.
+    gametestRuntimeOnly sourceSets.testblocks.output
+
+    testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.4"
+
+    // Dev runs only, never shipped: Sodium (always used with this mod) and Mod Menu.
+    localRuntime "maven.modrinth:sodium:mc26.3-0.9.3-beta.1-fabric"
+    localRuntime "maven.modrinth:modmenu:21.0.0"
+    // Compat targets: Torchlit, taken straight from its own project's latest build, with the Cloth
+    // Config its settings screen uses, and Just Like Rays. Comment these out to run without them.
+    // Just Like Rays writes its own light format into saves: a world opened with it does not load
+    // cleanly without it.
+    localRuntime fileTree(dir: "../Torchlit/build/libs", include: "torchlit-*.jar", exclude: "*-sources.jar")
+    localRuntime("maven.modrinth:cloth-config:26.3.159+fabric") { transitive = false }
+    // Off while Voxy is on: Voxy cannot read Just Like Rays' light format and draws its terrain black.
+    // localRuntime "maven.modrinth:just-like-rays:0.2.0.alpha-mc26.3"
+    // Voxy: LOD terrain beyond render distance, drawn with its own shaders.
+    // Comment out for Vulkan runs: Voxy refuses the Vulkan backend and the game falls back to OpenGL.
+    localRuntime("maven.modrinth:voxy:0.2.20-beta") { transitive = false }
+
+    // Sodium (quality page option) and Mod Menu (fallback settings screen): compiled against, both optional.
+    compileOnly "maven.modrinth:sodium:mc26.3-0.9.3-beta.1-fabric"
+    compileOnly "maven.modrinth:modmenu:21.0.0"
+
+    // LambDynamicLights: compiled against for dynamic light color, optional when the mod runs. Its
+    // API and loader library are jars inside its jar; the compiler needs those too.
+    lambDynLights("maven.modrinth:lambdynamiclights:rylKnJ4M") { transitive = false }
+    compileOnly "maven.modrinth:lambdynamiclights:rylKnJ4M"
+    compileOnly fileTree(layout.buildDirectory.dir("lambdynlights-nested")) { builtBy lambDynLightsNested }
+    localRuntime "maven.modrinth:lambdynamiclights:rylKnJ4M"
+
+    // Real-world test content: Dungeons and Taverns and all its structure overhauls (lit dungeons,
+    // taverns, fortresses), plus Chunky to pre-generate a test world. Modrinth version ids.
+    [
+            "dungeons-and-taverns:WilF7nqU",
+            "dungeons-and-taverns-ancient-city-overhaul:HYt24jpu",
+            "dungeons-and-taverns-stronghold-overhaul:hNKbQ85c",
+            "dungeons-and-taverns-pillager-outpost-overhaul:nCmbkuPY",
+            "dungeons-and-taverns-woodland-mansion-overhaul:EPLwoEkn",
+            "dungeons-and-taverns-swamp-hut-overhaul:RPWp4sfz",
+            "dungeons-and-taverns-ocean-monument-overhaul:k9Bj5hfz",
+            "dungeons-and-taverns-jungle-temple-overhaul:pF9bn2gi",
+            "dungeons-and-taverns-desert-temple-overhaul:Pz42qz4P",
+            "dungeons-and-taverns-nether-fortress-overhaul:IxUX6U93",
+            "dungeons-and-taverns-mineshaft-overhaul:4kvqc3O1",
+            "chunky:4Eotm6ov",
+            // Ok Zoomer, for looking at distant light in play tests.
+            "ok-zoomer:g9ICu3fu",
+            // Screencopy: screenshots go to the clipboard too (needs Cloth Config, already above).
+            "screencopy:S3BqK7ib",
+    ].each { localRuntime("maven.modrinth:${it}") { transitive = false } }
+}
+
+test {
+    useJUnitPlatform()
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", project.minecraft_version
+    inputs.property "loader_version", project.loader_version
+    filteringCharset "UTF-8"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version": project.minecraft_version,
+                "loader_version": project.loader_version
+    }
+}
+
+def targetJavaVersion = 25
+tasks.withType(JavaCompile).configureEach {
+    // ensure that the encoding is set to UTF-8, no matter what the system default is
+    it.options.encoding = "UTF-8"
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        it.options.release.set(targetJavaVersion)
+    }
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    withSourcesJar()
+}
+
+jar {
+    from("LICENSE.txt") {
+        rename { "${it}_${project.archives_base_name}"}
+    }
+}
+
+// configure the maven publication
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = project.archives_base_name
+            from components.java
+        }
+    }
+    repositories {
+    }
+}

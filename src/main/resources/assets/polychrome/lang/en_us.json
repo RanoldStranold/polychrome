@@ -1,0 +1,7 @@
+{
+  "key.polychrome.toggle": "Toggle colored lighting (dev)",
+  "key.polychrome.benchmark": "Measure colored lighting cost (dev)",
+  "polychrome.options.title": "Polychrome",
+  "polychrome.options.enabled": "Colored Lighting",
+  "polychrome.options.enabled.tooltip": "Colors block light by the color it gives off. Torches are warm, soul fire is blue and so on. Does not change brightness. Off shows plain, vanilla light."
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "polychrome",
+  "version": "${version}",
+
+  "name": "Polychrome",
+  "description": "Colored block light that keeps the light engine's brightness. Colors come from resource packs.",
+  "authors": ["Ranold"],
+  "contact": {},
+
+  "license": "All-Rights-Reserved",
+
+  "environment": "client",
+  "entrypoints": {
+    "client": ["net.ranold.polychrome.Polychrome"],
+    "modmenu": ["net.ranold.polychrome.compat.ModMenuCompat"]
+  },
+
+  "mixins": [
+    "polychrome.mixins.json"
+  ],
+
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}"
+  },
+
+  "suggests": {
+    "sodium": "*",
+    "modmenu": "*"
+  }
+}

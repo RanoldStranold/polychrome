@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "polychrome-testblocks",
+  "version": "1.0",
+  "name": "Polychrome Test Lights",
+  "description": "Dev runs only: full-cube light blocks in every color of the rainbow, for checking colors by hand.",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["net.ranold.polychrome.testblocks.TestLights"]
+  },
+  "depends": {
+    "polychrome": "*"
+  }
+}

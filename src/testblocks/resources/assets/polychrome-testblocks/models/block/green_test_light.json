@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "polychrome-testblocks:block/green_test_light"
+  }
+}

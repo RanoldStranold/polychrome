@@ -1,0 +1,33 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+bin/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.settings/
+.vscode/
+.classpath
+.project
+*.launch
+
+# Workspace
+run/
+repos/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local notes
+FABRIC-TEMPLATE-BUILD-FIX.md
+
+# Third-party reference sources
+R&D/
+docs/
