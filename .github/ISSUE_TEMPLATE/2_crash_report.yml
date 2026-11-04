@@ -1,0 +1,37 @@
+name: Crash
+description: Report a crash caused by Polychrome
+title: "[Crash]: "
+labels: ["crash"]
+body:
+  - type: input
+    id: mod-version
+    attributes:
+      label: "Mod Version"
+      description: "What version of Polychrome are you using?"
+      placeholder: "e.g., 0.1-ALPHA"
+    validations:
+      required: true
+  - type: textarea
+    id: crash-log
+    attributes:
+      label: "Crash Log"
+      description: "Paste a link to the full crash log/latest.log (mclo.gs, gist, pastebin, etc)"
+      placeholder: "https://mclo.gs/..."
+    validations:
+      required: true
+  - type: textarea
+    id: modlist
+    attributes:
+      label: "Modlist"
+      description: "A full list of every mod installed"
+      placeholder: "Paste modlist here"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: "What were you doing when it crashed?"
+      description: "Steps to reproduce, if you needed"
+      placeholder: "I was working in the lab late one night..."
+    validations:
+      required: true

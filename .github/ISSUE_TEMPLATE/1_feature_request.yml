@@ -1,0 +1,14 @@
+name: Feature Request
+description: Request a feature to be added to Polychrome, or a color for a modded light
+title: "Request a Feature"
+labels: ["feature request"]
+body:
+  
+  - type: textarea
+    id: description
+    attributes:
+      label: "Description of the request"
+      description: "Please provide a clear and concise description of whatever it is you're requesting. For a modded light, name the mod and the block"
+      placeholder: "cmon lets hear it"
+    validations:
+      required: true

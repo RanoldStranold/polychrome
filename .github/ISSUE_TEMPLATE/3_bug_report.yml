@@ -1,0 +1,36 @@
+name: Bug
+description: Ex. a light showing the wrong color, color not showing up, or anything else that isn't a crash or feature request
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: input
+    id: mod-version
+    attributes:
+      label: "Mod Version"
+      description: "What version of Polychrome are you using?"
+      placeholder: "e.g., 0.1-ALPHA"
+    validations:
+      required: true
+  - type: input
+    id: other-mod-version
+    attributes:
+      label: "Other mods being used"
+      description: "What other mods are you using, and what versions?"
+      placeholder: "e.g., Sodium 0.9.#, Voxy 0.2.#, LambDynamicLights 4.#"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: "Description"
+      description: "Any information you find relevant, could be a log file, screenshots or complete modlist"
+      placeholder: "Describe the issue here..."
+    validations:
+      required: true
+  - type: checkboxes
+    id: toggle-confirmation
+    attributes:
+      label: "I can read"
+      options:
+        - label: "I turned Colored Lighting off (Video Settings > General, or the Mod Menu config) and the problem went away"
+          required: true
