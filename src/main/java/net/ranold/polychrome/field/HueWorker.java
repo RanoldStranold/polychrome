@@ -118,7 +118,10 @@ public final class HueWorker {
     // one byte per cell 0..15, null if dark. vanilla nibbles unpacked directly, anything else
     // (JLR stores more precision) goes through DataLayer.get like the rest of the game
     public static byte @Nullable [] readLight(Level level, int sx, int sy, int sz) {
-        DataLayer layer = level.getLightEngine().getLayerListener(LightLayer.BLOCK).getDataLayerData(SectionPos.of(sx, sy, sz));
+        return unpackLight(level.getLightEngine().getLayerListener(LightLayer.BLOCK).getDataLayerData(SectionPos.of(sx, sy, sz)));
+    }
+
+    public static byte @Nullable [] unpackLight(@Nullable DataLayer layer) {
         if (layer == null || layer.isEmpty()) {
             return null;
         }

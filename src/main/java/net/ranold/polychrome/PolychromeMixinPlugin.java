@@ -34,7 +34,7 @@ public final class PolychromeMixinPlugin implements IMixinConfigPlugin {
     public List<String> getMixins() {
         List<String> mixins = new ArrayList<>();
         if (FabricLoader.getInstance().isModLoaded("voxy")) {
-            mixins.addAll(List.of("MixinVoxyAutoIngest", "MixinVoxyRenderer", "MixinVoxyShaderLoader"));
+            mixins.addAll(List.of("MixinVoxyAutoIngest", "MixinVoxyRawIngest", "MixinVoxyRenderer", "MixinVoxyShaderLoader"));
         }
         if (FabricLoader.getInstance().isModLoaded("sodium")) {
             mixins.add("MixinSodiumConfigBuilder");

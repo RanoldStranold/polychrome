@@ -4,13 +4,16 @@ import net.minecraft.resources.Identifier;
 import net.ranold.polychrome.Polychrome;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.ranold.polychrome.far.FarColors;
 import net.ranold.polychrome.far.FarIngest;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 
 // colored light on voxy LODs. patches lod/quad_util.glsl as voxy loads it: adds far_colors.glsl,
@@ -25,6 +28,7 @@ public final class VoxyCompat {
 
     private static @Nullable String snippet;
     private static boolean patched;
+    private static @Nullable Field worldKey;
 
     private VoxyCompat() {
     }
@@ -65,6 +69,29 @@ public final class VoxyCompat {
         ClientLevel level = Minecraft.getInstance().level;
         if (ingest != null && level != null && chunk.getLevel() != level && chunk.getLevel().dimension().equals(level.dimension())) {
             ingest.chunkGenerated(chunk);
+        }
+    }
+
+    // a section handed to voxy's public raw ingest (voxygen builds LODs this way, never through
+    // tryAutoIngestChunk). voxy also uses it for block changes in loaded chunks: those are ours already
+    public static void sectionIngested(Object worldId, LevelChunkSection section, int cx, int cy, int cz, @Nullable DataLayer blockLight) {
+        FarIngest ingest = Polychrome.farIngest();
+        ClientLevel level = Minecraft.getInstance().level;
+        if (ingest == null || level == null || section == null || !level.dimension().equals(dimensionOf(worldId))
+                || level.getChunkSource().hasChunk(cx, cz)) {
+            return;
+        }
+        ingest.sectionGenerated(cx, cy, cz, section, blockLight, level.getMinSectionY(), level.getSectionsCount());
+    }
+
+    private static @Nullable Object dimensionOf(Object worldId) {
+        try {
+            if (worldKey == null) {
+                worldKey = worldId.getClass().getField("key");
+            }
+            return worldKey.get(worldId);
+        } catch (ReflectiveOperationException e) {
+            return null;
         }
     }
 

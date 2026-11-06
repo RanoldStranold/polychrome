@@ -1,20 +1,25 @@
 package net.ranold.polychrome.far;
 
 import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainer;
 import net.ranold.polychrome.Polychrome;
 import net.ranold.polychrome.field.HueField;
 import net.ranold.polychrome.field.HueWorker;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.LongAdder;
 
-// distant color for chunks the player never loads (chunky pregen ingested by voxy). own hue field on
-// its own thread, publishes sections once their 4 side neighbors are known. keeps the last MAX_CHUNKS
-// chunks only, pregen goes outward so neighbors come soon after
+// distant color for chunks the player never loads (chunky pregen ingested by voxy, or sections other
+// mods hand voxy directly, like voxygen). own hue field on its own thread, publishes sections once
+// their 4 side neighbors are known. keeps the last MAX_CHUNKS chunks only, pregen goes outward so
+// neighbors come soon after
 public final class FarIngest {
 
     private static final int MAX_CHUNKS = 1024;
@@ -27,8 +32,11 @@ public final class FarIngest {
 
     // oldest first: x, z, min section y, section count
     private final LongArrayFIFOQueue chunks = new LongArrayFIFOQueue();
-    private volatile long chunksSeen, sectionsPublished;
+    private final LongOpenHashSet columns = new LongOpenHashSet();
+    private volatile long chunksSeen, sectionsPublished, sectionsHanded;
     private volatile boolean busy;
+    // time spent on the caller's thread (Voxygen workers)
+    private final LongAdder callerNanos = new LongAdder(), callerCalls = new LongAdder();
 
     public FarIngest(FarColors far) {
         this.far = far;
@@ -59,10 +67,42 @@ public final class FarIngest {
             for (int i = 0; i < light.length; i++) {
                 this.field.loadSection(cx, minSectionY + i, cz, light[i], HueWorker.sources(palettes[i]));
             }
-            this.chunks.enqueue(((long) cx << 32) | (cz & 0xFFFFFFFFL));
-            this.chunks.enqueue(((long) minSectionY << 32) | light.length);
-            this.chunksSeen++;
+            this.track(cx, cz, minSectionY, light.length);
         });
+    }
+
+    // any thread. one section at a time, air sections never come, so the first section of a column
+    // marks the whole column known (dark) and the real ones overwrite it
+    public void sectionGenerated(int cx, int cy, int cz, LevelChunkSection section, @Nullable DataLayer blockLight,
+                                 int minSectionY, int sectionCount) {
+        long start = System.nanoTime();
+        byte[] light = HueWorker.unpackLight(blockLight);
+        PalettedContainer<BlockState> palette = light != null && section.maybeHas(state -> state.getLightEmission() > 0)
+                ? section.getStates().copy() : null;
+        this.tasks.add(() -> {
+            this.sectionsHanded++;
+            if (!this.columns.contains(column(cx, cz))) {
+                for (int i = 0; i < sectionCount; i++) {
+                    this.field.loadSection(cx, minSectionY + i, cz, null, HueWorker.sources(null));
+                }
+                this.track(cx, cz, minSectionY, sectionCount);
+            }
+            this.field.loadSection(cx, cy, cz, light, HueWorker.sources(palette));
+        });
+        this.callerNanos.add(System.nanoTime() - start);
+        this.callerCalls.increment();
+    }
+
+    private void track(int cx, int cz, int minSectionY, int count) {
+        if (this.columns.add(column(cx, cz))) {
+            this.chunks.enqueue(column(cx, cz));
+            this.chunks.enqueue(((long) minSectionY << 32) | count);
+            this.chunksSeen++;
+        }
+    }
+
+    private static long column(int cx, int cz) {
+        return ((long) cx << 32) | (cz & 0xFFFFFFFFL);
     }
 
     public void shutdown() {
@@ -87,6 +127,7 @@ public final class FarIngest {
                 while (this.chunks.size() / 2 > MAX_CHUNKS) {
                     long pos = this.chunks.dequeueLong(), range = this.chunks.dequeueLong();
                     int cx = (int) (pos >> 32), cz = (int) pos, minY = (int) (range >> 32), count = (int) range;
+                    this.columns.remove(pos);
                     for (int i = 0; i < count; i++) {
                         this.field.unloadSection(cx, minY + i, cz);
                     }
@@ -118,7 +159,8 @@ public final class FarIngest {
     }
 
     public String stats() {
-        return "generated chunks seen " + this.chunksSeen + ", sections published " + this.sectionsPublished
-                + ", kept " + this.field.loadedSections() + " sections";
+        return "generated chunks seen " + this.chunksSeen + ", sections handed one by one " + this.sectionsHanded + ", sections published " + this.sectionsPublished
+                + ", kept " + this.field.loadedSections() + " sections, caller thread " + this.callerNanos.sum() / 1_000_000 + " ms for "
+                + this.callerCalls.sum() + " sections";
     }
 }

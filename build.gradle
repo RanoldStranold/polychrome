@@ -99,6 +99,10 @@ dependencies {
     // Voxy: LOD terrain beyond render distance, drawn with its own shaders.
     // Comment out for Vulkan runs: Voxy refuses the Vulkan backend and the game falls back to OpenGL.
     localRuntime("maven.modrinth:voxy:0.2.20-beta") { transitive = false }
+    // Voxygen: generates Voxy LODs itself and hands Voxy sections one by one (rawIngest).
+    // Comment out for full game test runs: its workers race the game's structure cache and crash
+    // world creation (ConcurrentModificationException in StructureTemplate$Palette.blocks).
+    localRuntime("maven.modrinth:voxy-worldgen:FZLopf8z") { transitive = false }
 
     // Sodium (quality page option) and Mod Menu (fallback settings screen): compiled against, both optional.
     compileOnly "maven.modrinth:sodium:mc26.3-0.9.3-beta.1-fabric"
