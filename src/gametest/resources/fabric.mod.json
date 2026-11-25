@@ -12,6 +12,8 @@
       "net.ranold.polychrome.gametest.WallTorchGameTest",
       "net.ranold.polychrome.gametest.TestLightsGameTest",
       "net.ranold.polychrome.gametest.ResourceReloadGameTest",
+      "net.ranold.polychrome.gametest.ApiGameTest",
+      "net.ranold.polychrome.gametest.TerrainShaderGameTest",
       "net.ranold.polychrome.gametest.VoxyFarGameTest",
       "net.ranold.polychrome.gametest.VoxyChunkyGameTest",
       "net.ranold.polychrome.gametest.VoxygenGameTest",

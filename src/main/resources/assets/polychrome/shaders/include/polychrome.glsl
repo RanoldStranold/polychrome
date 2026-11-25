@@ -6,13 +6,25 @@
 
 #ifdef POLYCHROME
 
+// CL_RAW_GL: raw GL renderers (nvidium) set these by location, must match LightVolume.bindRawGl.
+// plain uniforms there: nvidium turns on bindless uniform buffers, which ignore normal buffer bindings
+#ifdef CL_RAW_GL
+layout(location = 120) uniform ivec4 CL_Camera;
+layout(location = 121) uniform vec4 CL_Params;
+#else
 layout(std140) uniform CL_Header {
     ivec4 CL_Camera;  // xyz camera block, w 1 if this draw is the world
     vec4 CL_Params;  // xyz camera pos - block pos, w saturation
 };
+#endif
 
+#ifdef CL_RAW_GL
+layout(binding = 13) uniform isamplerBuffer CL_Pages;
+layout(binding = 14) uniform usamplerBuffer CL_Cells;
+#else
 uniform isamplerBuffer CL_Pages;
 uniform usamplerBuffer CL_Cells;
+#endif
 
 // cells are hue * brightness. below this fade back to white so faint edge cells dont flicker
 const float CL_PRESENCE = 1.0e-3;
@@ -30,9 +42,9 @@ vec3 cl_cell(ivec3 coarse, ivec3 cameraSection) {
         return vec3(0.0);
     }
     ivec3 local = coarse & 7;
-    uint packed = texelFetch(CL_Cells, (slot << 9) | (local.y << 6) | (local.z << 3) | local.x).r;
-    float scale = exp2(float(packed >> 27u) - 24.0);
-    return vec3(float(packed & 511u), float((packed >> 9u) & 511u), float((packed >> 18u) & 511u)) * scale;
+    uint bits = texelFetch(CL_Cells, (slot << 9) | (local.y << 6) | (local.z << 3) | local.x).r;
+    float scale = exp2(float(bits >> 27u) - 24.0);
+    return vec3(float(bits & 511u), float((bits >> 9u) & 511u), float((bits >> 18u) & 511u)) * scale;
 }
 
 // trilinear over the 8 cells around it, unlit ones add nothing. camera relative for precision

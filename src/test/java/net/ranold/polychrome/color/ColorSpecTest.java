@@ -78,6 +78,25 @@ class ColorSpecTest {
     }
 
     @Test
+    void automaticColorFollowsTheGlowNotTheFrame() {
+        // 4x4: gray frame around a 2x2 orange glow, plain average would be much grayer
+        int[] image = new int[16];
+        java.util.Arrays.fill(image, 0xFF606060);
+        for (int y = 1; y <= 2; y++) {
+            for (int x = 1; x <= 2; x++) {
+                image[y * 4 + x] = 0xFFFF8000;
+            }
+        }
+        double[] sums = new double[3];
+        ColorSpec.addGlow(image, sums);
+        int glow = ColorSpec.fromSums(sums);
+        assertEquals(255, (glow >> 16) & 0xFF);
+        assertTrue(((glow >> 8) & 0xFF) < 150 && (glow & 0xFF) < 40, String.format("should stay orange: #%06X", glow));
+        assertTrue((ColorSpec.averageColor(image, 4, 4, null) & 0xFF) > 100, "the plain average is the gray one");
+        assertEquals(-1, ColorSpec.fromSums(new double[3]), "nothing visible");
+    }
+
+    @Test
     void onlyTheHueMatters() {
         assertEquals(ColorSpec.averageColor(new int[] {0xFF402010}, 1, 1, null), ColorSpec.averageColor(new int[] {0xFFFF8040}, 1, 1, null));
     }

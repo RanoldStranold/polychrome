@@ -19,6 +19,9 @@ public final class ShaderPatcher {
     private static final String SODIUM_INCLUDE = "#include <sodium:chunk_vertex.glsl>";
     private static final String SODIUM_LIGHT = "v_Color = _vert_color * texture(u_LightTex, _vert_tex_light_coord);";
 
+    // last Sodium terrain load matched, for the game tests
+    public static volatile boolean sodiumTerrainColored;
+
     private ShaderPatcher() {
     }
 
@@ -53,6 +56,7 @@ public final class ShaderPatcher {
     private static String patchSodiumTerrain(Identifier id, String source) {
         if (count(source, SODIUM_INCLUDE) != 1 || count(source, SODIUM_LIGHT) != 1) {
             Polychrome.LOGGER.warn("Not coloring Sodium terrain: shader {} no longer matches", id);
+            sodiumTerrainColored = false;
             return source;
         }
         String patched = source.replace(SODIUM_INCLUDE, SODIUM_INCLUDE + "\n#include <polychrome:polychrome.glsl>");
@@ -62,6 +66,7 @@ public final class ShaderPatcher {
                     v_Color = _vert_color * cl_tint(u_LightTex, _vert_tex_light_coord, texture(u_LightTex, _vert_tex_light_coord), position);
                 #endif""");
         Polychrome.LOGGER.info("Colored Sodium terrain shader");
+        sodiumTerrainColored = true;
         return patched;
     }
 

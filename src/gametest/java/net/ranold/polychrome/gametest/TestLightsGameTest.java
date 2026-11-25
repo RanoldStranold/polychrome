@@ -13,9 +13,9 @@ import net.ranold.polychrome.field.Rgb9e5;
 public class TestLightsGameTest implements FabricClientGameTest {
 
     private static final int GROUND = -60;
-    private static final String[] COLORS = {"red", "orange", "yellow", "green", "cyan", "blue", "purple", "magenta", "white"};
-    // texture ones = the texture's own color
-    private static final int[] EXPECTED = {0xFF2020, 0xFF8000, 0xFFE020, 0x20FF40, 0x20E0FF, 0x2040FF, 0x9030FF, 0xFF30D0, 0xFFFFFF};
+    private static final String[] COLORS = {"red", "orange", "yellow", "green", "cyan", "blue", "purple", "magenta", "white", "lime"};
+    // texture ones = the texture's own color. lime has none written: automatic, from its texture
+    private static final int[] EXPECTED = {0xFF2020, 0xFF8000, 0xFFE020, 0x20FF40, 0x20E0FF, 0x2040FF, 0x9030FF, 0xFF30D0, 0xFFFFFF, 0x82FF23};
 
     @Override
     public void runTest(ClientGameTestContext context) {

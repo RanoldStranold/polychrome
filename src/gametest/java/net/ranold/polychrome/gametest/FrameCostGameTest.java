@@ -7,14 +7,20 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
 import net.minecraft.client.InactivityFpsLimit;
 import net.ranold.polychrome.Polychrome;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 
-// diagnostic, not listed. tint on vs off (K), alternating so drift hits both, uncapped fps.
-// terrain from above + torch lit room underground. prints [polychrome-perf] frame cost, asserts nothing
+// diagnostic, not listed. tint on vs off, alternating so drift hits both, uncapped fps. real world (seed 1234,
+// pregenerated with chunky so worldgen does not compete): terrain by day, torches on the surface at night, a
+// torch lit room underground. prints [polychrome-perf] frame cost, asserts nothing
 public class FrameCostGameTest implements FabricClientGameTest {
 
-    private static final int FRAMES = 1500;
-    private static final int ROUNDS = 4;
+    // frame times are steady (rounds within ~0.05 ms), 15 s a sample is enough
+    private static final int FRAMES = 300;
+    private static final int ROUNDS = 2;
+    private static final int RENDER_DISTANCE = 12;
 
     @Override
     public void runTest(ClientGameTestContext context) {
@@ -22,19 +28,44 @@ public class FrameCostGameTest implements FabricClientGameTest {
             client.options.framerateLimit().set(260);  // unlimited
             client.options.enableVsync().set(false);
             client.options.inactivityFpsLimit().set(InactivityFpsLimit.MINIMIZED);
-            client.options.renderDistance().set(12);
+            client.options.renderDistance().set(RENDER_DISTANCE);
         });
-        try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
+        try (TestSingleplayerContext singleplayer = context.worldBuilder()
+                .setUseConsistentSettings(false)
+                .adjustSettings(settings -> {
+                    settings.setWorldType(settings.getNormalPresetList().getFirst());
+                    settings.setSeed("1234");
+                })
+                .create()) {
             TestServerContext server = singleplayer.getServer();
             server.runCommand("gamerule advance_time false");
+            server.runCommand("gamerule advance_weather false");
             server.runCommand("gamemode spectator @a");
+            long logStart = logLength();
+            server.runCommand("chunky center 0 0");
+            server.runCommand("chunky radius " + (RENDER_DISTANCE + 2) * 16);
+            server.runCommand("chunky start");
+            for (int i = 0; i < 6000 && !logSince(logStart).contains("Task finished for minecraft:overworld"); i += 20) {
+                context.waitTicks(20);
+            }
 
+            // spectators keep no chunks loaded on the server: heightmap reads and setblock need these
+            server.runCommand("forceload add -48 -48 48 48");
+            context.waitTicks(40);
             server.runCommand("time set noon");
-            server.runCommand("tp @a 0.5 140 0.5 30 25");
-            measure(context, singleplayer, "terrain from above, day");
+            server.runCommand("execute positioned 0.5 0 0.5 positioned over world_surface run tp @a ~ ~20 ~ 30 25");
+            measure(context, singleplayer, "terrain by day");
 
             server.runCommand("time set midnight");
-            server.runCommand("fill -24 -34 -24 24 -24 24 minecraft:air");
+            for (int x = -40; x <= 40; x += 8) {
+                for (int z = -40; z <= 40; z += 8) {
+                    server.runCommand(String.format("execute positioned %d 0 %d positioned over motion_blocking_no_leaves run setblock ~ ~ ~ minecraft:torch", x, z));
+                }
+            }
+            server.runCommand("execute positioned 0.5 0 0.5 positioned over world_surface run tp @a ~ ~12 ~ 45 30");
+            measure(context, singleplayer, "torches on the surface at night");
+
+            server.runCommand("fill -23 -34 -23 23 -24 23 minecraft:air");
             for (int x = -20; x <= 20; x += 5) {
                 for (int z = -20; z <= 20; z += 5) {
                     server.runCommand(String.format("setblock %d -34 %d minecraft:torch", x, z));
@@ -47,12 +78,13 @@ public class FrameCostGameTest implements FabricClientGameTest {
     }
 
     private static void measure(ClientGameTestContext context, TestSingleplayerContext singleplayer, String view) {
-        // RD 12 worldgen is slow and waiting for every chunk can time out, so just wait a fixed bit
-        context.waitTicks(300);
+        // waitForChunksRender times out at RD 12; pregenerated, so a fixed wait for loading from disk
+        context.waitTicks(200);
         for (int i = 0; i < 600 && context.computeOnClient(client -> Polychrome.colorPending()); i++) {
             context.waitTick();
         }
         context.waitTicks(40);
+        context.takeScreenshot("frame-cost-" + view.replace(' ', '-'));
         double[][] medians = new double[2][ROUNDS];
         double[][] means = new double[2][ROUNDS];
         for (int round = 0; round < ROUNDS; round++) {
@@ -78,5 +110,22 @@ public class FrameCostGameTest implements FabricClientGameTest {
 
     private static String[] round(double[] values) {
         return Arrays.stream(values).mapToObj(v -> String.format("%.3f", v)).toArray(String[]::new);
+    }
+
+    private static long logLength() {
+        try {
+            return Files.size(Path.of("logs", "latest.log"));
+        } catch (IOException e) {
+            return 0;
+        }
+    }
+
+    private static String logSince(long offset) {
+        try {
+            byte[] all = Files.readAllBytes(Path.of("logs", "latest.log"));
+            return offset >= all.length ? "" : new String(all, (int) offset, all.length - (int) offset);
+        } catch (IOException e) {
+            return "";
+        }
     }
 }

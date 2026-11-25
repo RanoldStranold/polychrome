@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "polychrome-packtest",
+  "version": "1.0",
+  "name": "Polychrome Resource Pack Tests",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "net.ranold.polychrome.packtest.KeysPackTest",
+      "net.ranold.polychrome.packtest.ValuesPackTest",
+      "net.ranold.polychrome.packtest.OrderPackTest",
+      "net.ranold.polychrome.packtest.ItemsPackTest",
+      "net.ranold.polychrome.packtest.DimensionsPackTest",
+      "net.ranold.polychrome.packtest.AutomaticPackTest",
+      "net.ranold.polychrome.packtest.InWorldPackTest",
+      "net.ranold.polychrome.packtest.MistakesPackTest",
+      "net.ranold.polychrome.packtest.RulesPackTest",
+      "net.ranold.polychrome.packtest.CombosPackTest",
+      "net.ranold.polychrome.packtest.RulesPicturePackTest"
+    ]
+  },
+  "depends": {
+    "polychrome": "*",
+    "polychrome-testblocks": "*"
+  }
+}

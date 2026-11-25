@@ -121,6 +121,33 @@ public sealed interface ColorSpec {
         return (int) Math.round(r / max * 255) << 16 | (int) Math.round(g / max * 255) << 8 | (int) Math.round(b / max * 255);
     }
 
+    // automatic color for lights nobody wrote one for. bright, saturated pixels count most (the glowing
+    // part, not a stone frame). adds r, g, b into sums so several textures of one model can be combined
+    static void addGlow(int[] argb, double[] sums) {
+        for (int pixel : argb) {
+            double a = ((pixel >>> 24) & 0xFF) / 255.0;
+            int r = (pixel >> 16) & 0xFF, g = (pixel >> 8) & 0xFF, b = pixel & 0xFF;
+            int max = Math.max(r, Math.max(g, b)), min = Math.min(r, Math.min(g, b));
+            if (a <= 0 || max == 0) {
+                continue;
+            }
+            double value = max / 255.0, saturation = (max - min) / (double) max;
+            double weight = a * value * value * (0.2 + saturation);
+            sums[0] += r * weight;
+            sums[1] += g * weight;
+            sums[2] += b * weight;
+        }
+    }
+
+    // -1 if nothing visible. brightest channel = 255
+    static int fromSums(double[] sums) {
+        double max = Math.max(sums[0], Math.max(sums[1], sums[2]));
+        if (max <= 0) {
+            return -1;
+        }
+        return (int) Math.round(sums[0] / max * 255) << 16 | (int) Math.round(sums[1] / max * 255) << 8 | (int) Math.round(sums[2] / max * 255);
+    }
+
     // sets can point at other sets. loops / dead names make those sets unusable (reported in problems by set name).
     // texture can throw BadColor
     static Map<String, Integer> resolveSets(Map<String, ColorSpec> sets, Function<Texture, Integer> texture, Map<String, String> problems) {

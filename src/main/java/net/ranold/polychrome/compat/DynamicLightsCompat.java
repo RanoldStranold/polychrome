@@ -21,7 +21,9 @@ import net.ranold.polychrome.field.DynamicLight;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 // reads LambDynamicLights sources so they get color. linked against LDL, only loaded when it's
 // installed (Polychrome.DYNAMIC_LIGHTS). color picked like LDL picks luminance. beams not read yet, stay white
@@ -30,6 +32,13 @@ public final class DynamicLightsCompat {
     private static final DynamicLight[] NONE = new DynamicLight[0];
     private static Field sourcesField;
     private static boolean failed;
+    // LDL's Fast / Fastest modes refresh luminance only every 5-20 ticks, so a torch just put away (or
+    // swapped for a dimmer light) still shines at its old level a moment: keep the color it last had. game thread
+    private static final Map<DynamicLightSource, Integer> lastColor = new WeakHashMap<>();
+
+    // what the entity has that gives light, and how bright LDL would make it
+    private record Pick(int rgb, int luminance) {
+    }
 
     private DynamicLightsCompat() {
     }
@@ -49,9 +58,19 @@ public final class DynamicLightsCompat {
             if (luminance <= 0) {
                 continue;
             }
-            int rgb = source instanceof Entity entity ? colorOf(entity)
-                    : source instanceof FireflyParticle ? LightColors.colorOf(Blocks.FIREFLY_BUSH.defaultBlockState())
-                    : LightColors.white();
+            int rgb;
+            if (source instanceof Entity entity) {
+                Pick pick = colorOf(entity);
+                Integer last = lastColor.get(source);
+                if (pick.luminance() >= luminance || last == null) {
+                    rgb = pick.luminance() > 0 ? pick.rgb() : LightColors.white();
+                    lastColor.put(source, rgb);
+                } else {
+                    rgb = last;
+                }
+            } else {
+                rgb = source instanceof FireflyParticle ? LightColors.colorOf(Blocks.FIREFLY_BUSH.defaultBlockState()) : LightColors.white();
+            }
             lights.add(new DynamicLight(light.getDynamicLightX(), light.getDynamicLightY(), light.getDynamicLightZ(), luminance, rgb & 0xFFFFFF));
         }
         return lights.toArray(DynamicLight[]::new);
@@ -75,10 +94,11 @@ public final class DynamicLightsCompat {
         }
     }
 
-    // same order as LDL: fire first (always 15), then the brightest of held/carried items and the entity's own light
-    private static int colorOf(Entity entity) {
+    // same order as LDL: fire first (always 15), then the brightest of held/carried items and the entity's own light.
+    // luminance 0 if nothing we read gives light
+    private static Pick colorOf(Entity entity) {
         if (entity.isOnFire()) {
-            return LightColors.colorOf(Blocks.FIRE.defaultBlockState());
+            return new Pick(LightColors.colorOf(Blocks.FIRE.defaultBlockState()), 15);
         }
         int best = -1, bestRgb = LightColors.white();
         // own light (blaze, magma cube) if its type has a color
@@ -104,8 +124,8 @@ public final class DynamicLightsCompat {
                 bestRgb = LightColors.colorOf(block);
             }
         }
-        // something we dont read (glowing effect, another mod): white
-        return best > 0 ? bestRgb : LightColors.white();
+        // something we dont read (glowing effect, another mod) gives 0: white
+        return new Pick(bestRgb, Math.max(best, 0));
     }
 
     private static List<ItemStack> carried(Entity entity) {

@@ -15,6 +15,7 @@ import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
@@ -194,10 +195,30 @@ public final class Polychrome implements ClientModInitializer {
         worker.chunkUnloaded(chunk.getPos().x(), chunk.getPos().z(), chunk.getMinSectionY(), chunk.getSectionsCount());
     }
 
-    public static void blockChanged(BlockPos pos, BlockState state) {
-        if (worker != null) {
-            worker.blockChanged(pos.getX(), pos.getY(), pos.getZ(), state);
+    // self: the block's own light or color changed. with rules, lights next to it may need a new color too
+    public static void blockChanged(BlockPos pos, BlockState state, boolean self) {
+        HueWorker hue = worker;
+        ClientLevel level = Minecraft.getInstance().level;
+        if (hue == null || level == null) {
+            return;
         }
+        if (self) {
+            hue.sourceChanged(pos.getX(), pos.getY(), pos.getZ(), sourceAt(level, pos, state));
+        }
+        if (LightColors.anyRules()) {
+            for (Direction side : Direction.values()) {
+                BlockPos next = pos.relative(side);
+                BlockState neighbor = level.getBlockState(next);
+                if (LightColors.hasRules(neighbor)) {
+                    hue.sourceChanged(next.getX(), next.getY(), next.getZ(), sourceAt(level, next, neighbor));
+                }
+            }
+        }
+    }
+
+    private static int sourceAt(ClientLevel level, BlockPos pos, BlockState state) {
+        return LightColors.sourceAt(state, side -> HueWorker.loadedState(level, pos.getX() + side.getStepX(),
+                pos.getY() + side.getStepY(), pos.getZ() + side.getStepZ()));
     }
 
     private static HueWorker workerFor(ClientLevel level) {
@@ -282,13 +303,14 @@ public final class Polychrome implements ClientModInitializer {
     // loaded chunk and complete when done (1 min cap), otherwise complete now
     private static CompletableFuture<Void> colorsReloaded(LightColors.Loaded loaded) {
         int[] before = LightColors.table();
+        java.util.List<LightColors.NeighborRule> rulesBefore = LightColors.rules();
         LightColors.install(loaded);
         lastRecolorMillis = -1;
         if (Minecraft.getInstance().level == null || worker == null) {
             return CompletableFuture.completedFuture(null);
         }
         LightColors.resolve(dimension(Minecraft.getInstance().level));
-        if (before != null && Arrays.equals(before, LightColors.table())) {
+        if (before != null && Arrays.equals(before, LightColors.table()) && rulesBefore.equals(LightColors.rules())) {
             LOGGER.info("Light colors unchanged; nothing to recolor");
             return CompletableFuture.completedFuture(null);
         }

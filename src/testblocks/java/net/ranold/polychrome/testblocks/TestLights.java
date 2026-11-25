@@ -22,7 +22,7 @@ import java.util.List;
 public class TestLights implements ModInitializer {
 
     public static final String MOD_ID = "polychrome-testblocks";
-    private static final String[] COLORS = {"red", "orange", "yellow", "green", "cyan", "blue", "purple", "magenta", "white"};
+    private static final String[] COLORS = {"red", "orange", "yellow", "green", "cyan", "blue", "purple", "magenta", "white", "lime"};
 
     @Override
     public void onInitialize() {

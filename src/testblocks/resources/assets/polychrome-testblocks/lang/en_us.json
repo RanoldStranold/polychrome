@@ -8,5 +8,6 @@
   "block.polychrome-testblocks.blue_test_light": "Blue Test Light",
   "block.polychrome-testblocks.purple_test_light": "Purple Test Light",
   "block.polychrome-testblocks.magenta_test_light": "Magenta Test Light",
-  "block.polychrome-testblocks.white_test_light": "White Test Light"
+  "block.polychrome-testblocks.white_test_light": "White Test Light",
+  "block.polychrome-testblocks.lime_test_light": "Lime Test Light (automatic color)"
 }

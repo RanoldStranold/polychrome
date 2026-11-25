@@ -56,16 +56,20 @@ public final class FarIngest {
         byte[][] light = new byte[sections.length][];
         @SuppressWarnings("unchecked")
         PalettedContainer<BlockState>[] palettes = new PalettedContainer[sections.length];
+        it.unimi.dsi.fastutil.ints.Int2IntMap[] rules = new it.unimi.dsi.fastutil.ints.Int2IntMap[sections.length];
         for (int i = 0; i < sections.length; i++) {
             light[i] = HueWorker.readLight(level, cx, minSectionY + i, cz);
             LevelChunkSection section = sections[i];
             if (light[i] != null && section != null && section.maybeHas(state -> state.getLightEmission() > 0)) {
                 palettes[i] = section.getStates().copy();
+                // this chunk only, reading neighbors could load or gen them
+                rules[i] = HueWorker.ruleSources(section, cx, minSectionY + i, cz, (x, y, z) -> (x >> 4) == cx && (z >> 4) == cz
+                        && y >= chunk.getMinY() && y <= chunk.getMaxY() ? chunk.getBlockState(new net.minecraft.core.BlockPos(x, y, z)) : null);
             }
         }
         this.tasks.add(() -> {
             for (int i = 0; i < light.length; i++) {
-                this.field.loadSection(cx, minSectionY + i, cz, light[i], HueWorker.sources(palettes[i]));
+                this.field.loadSection(cx, minSectionY + i, cz, light[i], HueWorker.sources(palettes[i], rules[i]));
             }
             this.track(cx, cz, minSectionY, light.length);
         });
@@ -79,6 +83,8 @@ public final class FarIngest {
         byte[] light = HueWorker.unpackLight(blockLight);
         PalettedContainer<BlockState> palette = light != null && section.maybeHas(state -> state.getLightEmission() > 0)
                 ? section.getStates().copy() : null;
+        // only the section is known here
+        it.unimi.dsi.fastutil.ints.Int2IntMap rules = palette == null ? null : HueWorker.ruleSources(section, cx, cy, cz, (x, y, z) -> null);
         this.tasks.add(() -> {
             this.sectionsHanded++;
             if (!this.columns.contains(column(cx, cz))) {
@@ -87,7 +93,7 @@ public final class FarIngest {
                 }
                 this.track(cx, cz, minSectionY, sectionCount);
             }
-            this.field.loadSection(cx, cy, cz, light, HueWorker.sources(palette));
+            this.field.loadSection(cx, cy, cz, light, HueWorker.sources(palette, rules));
         });
         this.callerNanos.add(System.nanoTime() - start);
         this.callerCalls.increment();

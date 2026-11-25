@@ -45,6 +45,9 @@ public class DynamicLightsGameTest implements FabricClientGameTest {
                 throw new AssertionError("held lights did not color the floor: soul " + soulFloor + ", torch " + fireFloor);
             }
 
+            staleLightKeepsColor(context, server, fire);
+            hold(context, server, "minecraft:torch");
+
             // soul lantern 10 east, player with a torch at origin
             server.runCommand(String.format("setblock 10 %d 0 minecraft:soul_lantern", GROUND));
             context.waitTicks(10);
@@ -78,6 +81,41 @@ public class DynamicLightsGameTest implements FabricClientGameTest {
             long work = context.computeOnClient(client -> Polychrome.workerMillis()) - workBefore;
             System.out.printf("[polychrome-perf] dynamic lights: walking with a torch for %d ticks: reading lights %.3f ms per tick on the game thread, worker %.2f ms per tick%n",
                     ticks, read / ticks, (double) work / ticks);
+        }
+    }
+
+    // Fastest mode refreshes LDL's light every 20 ticks: a torch put away keeps shining that long and
+    // must keep the torch color, not turn white (user bug 2026-11-20)
+    private static void staleLightKeepsColor(ClientGameTestContext context, TestServerContext server, int fire) {
+        var config = dev.lambdaurora.lambdynlights.LambDynLights.get().config;
+        var before = context.computeOnClient(client -> config.getDynamicLightsMode());
+        context.runOnClient(client -> config.setDynamicLightsMode(dev.lambdaurora.lambdynlights.DynamicLightsMode.FASTEST));
+        try {
+            hold(context, server, "minecraft:torch");
+            context.waitTicks(25);
+            server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+            int staleTicks = 0;
+            StringBuilder wrong = new StringBuilder();
+            for (int t = 0; t < 30; t++) {
+                context.waitTicks(1);
+                int[] colors = context.computeOnClient(client -> java.util.Arrays.stream(Polychrome.dynamicLights()).mapToInt(l -> l.rgb()).toArray());
+                if (colors.length == 0) {
+                    break;
+                }
+                staleTicks++;
+                for (int rgb : colors) {
+                    if (rgb != (fire & 0xFFFFFF)) {
+                        wrong.append(String.format("tick %d #%06X; ", t, rgb));
+                    }
+                }
+            }
+            System.out.printf("[polychrome-test] dynamic: Fastest mode, torch put away still shone %d ticks, wrong colors: %s%n",
+                    staleTicks, wrong.isEmpty() ? "none" : wrong);
+            if (!wrong.isEmpty()) {
+                throw new AssertionError("put-away torch lost its color while LambDynamicLights still lit it: " + wrong);
+            }
+        } finally {
+            context.runOnClient(client -> config.setDynamicLightsMode(before));
         }
     }
 

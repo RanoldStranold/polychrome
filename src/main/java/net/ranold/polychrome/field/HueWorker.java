@@ -61,18 +61,23 @@ public final class HueWorker {
         byte[][] light = new byte[sections.length][];
         @SuppressWarnings("unchecked")
         PalettedContainer<BlockState>[] palettes = new PalettedContainer[sections.length];
+        Int2IntMap[] rules = new Int2IntMap[sections.length];
         for (int i = 0; i < sections.length; i++) {
             light[i] = readLight(level, cx, minSectionY + i, cz);
             LevelChunkSection section = sections[i];
             if (section != null && section.maybeHas(state -> state.getLightEmission() > 0)) {
                 palettes[i] = section.getStates().copy();
+                rules[i] = ruleSources(section, cx, minSectionY + i, cz, (x, y, z) -> loadedState(level, x, y, z));
             }
         }
         this.post(() -> {
             for (int i = 0; i < light.length; i++) {
-                this.field.loadSection(cx, minSectionY + i, cz, light[i], sources(palettes[i]));
+                this.field.loadSection(cx, minSectionY + i, cz, light[i], sources(palettes[i], rules[i]));
             }
         });
+        if (LightColors.anyRules()) {
+            this.neighborsLoaded(level, cx, cz);
+        }
         this.gameThreadNanos += System.nanoTime() - start;
     }
 
@@ -97,8 +102,80 @@ public final class HueWorker {
     }
 
     public void blockChanged(int x, int y, int z, BlockState state) {
-        int source = LightColors.sourceOf(state);
+        this.sourceChanged(x, y, z, LightColors.sourceOf(state));
+    }
+
+    public void sourceChanged(int x, int y, int z, int source) {
         this.post(() -> this.field.setSource(x, y, z, source));
+    }
+
+    // a chunk came in: rule lights on the facing edge of its loaded neighbors may now see what they needed
+    private void neighborsLoaded(Level level, int cx, int cz) {
+        int[][] around = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int[] d : around) {
+            LevelChunk neighbor = level.getChunkSource().getChunk(cx + d[0], cz + d[1], false);
+            if (neighbor == null) {
+                continue;
+            }
+            LevelChunkSection[] sections = neighbor.getSections();
+            for (int i = 0; i < sections.length; i++) {
+                LevelChunkSection section = sections[i];
+                if (section == null || !section.maybeHas(LightColors::hasRules)) {
+                    continue;
+                }
+                int by = (neighbor.getMinSectionY() + i) << 4;
+                // the column of blocks next to the new chunk
+                int edge = d[0] == 1 ? 0 : d[0] == -1 ? 15 : -1, edgeZ = d[1] == 1 ? 0 : d[1] == -1 ? 15 : -1;
+                for (int a = 0; a < 16; a++) {
+                    for (int y = 0; y < 16; y++) {
+                        int lx = edge >= 0 ? edge : a, lz = edgeZ >= 0 ? edgeZ : a;
+                        BlockState state = section.getBlockState(lx, y, lz);
+                        if (LightColors.hasRules(state)) {
+                            int wx = ((cx + d[0]) << 4) + lx, wy = by + y, wz = ((cz + d[1]) << 4) + lz;
+                            this.sourceChanged(wx, wy, wz, LightColors.sourceAt(state,
+                                    side -> loadedState(level, wx + side.getStepX(), wy + side.getStepY(), wz + side.getStepZ())));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // null where chunk isn't loaded, so rule never matches on unknown blocks
+    public static @Nullable BlockState loadedState(Level level, int x, int y, int z) {
+        if (!level.getChunkSource().hasChunk(x >> 4, z >> 4)) {
+            return null;
+        }
+        return level.getBlockState(new net.minecraft.core.BlockPos(x, y, z));
+    }
+
+    public interface BlockLookup {
+        @Nullable BlockState at(int x, int y, int z);
+    }
+
+    // rule colors for the lights in one section that have rules (cell index -> source), null if none.
+    // outside: blocks beyond the section, null = unknown. on the thread that owns the section
+    public static @Nullable Int2IntMap ruleSources(@Nullable LevelChunkSection section, int sx, int sy, int sz, BlockLookup outside) {
+        if (section == null || !LightColors.anyRules() || !section.maybeHas(LightColors::hasRules)) {
+            return null;
+        }
+        Int2IntMap out = new Int2IntOpenHashMap();
+        int bx = sx << 4, by = sy << 4, bz = sz << 4;
+        for (int i = 0; i < 4096; i++) {
+            int x = i & 15, y = i >> 8, z = (i >> 4) & 15;
+            BlockState state = section.getBlockState(x, y, z);
+            if (!LightColors.hasRules(state)) {
+                continue;
+            }
+            out.put(i, LightColors.sourceAt(state, side -> {
+                int nx = x + side.getStepX(), ny = y + side.getStepY(), nz = z + side.getStepZ();
+                if (nx >= 0 && ny >= 0 && nz >= 0 && nx < 16 && ny < 16 && nz < 16) {
+                    return section.getBlockState(nx, ny, nz);
+                }
+                return outside.at(bx + nx, by + ny, bz + nz);
+            }));
+        }
+        return out.isEmpty() ? null : out;
     }
 
     // only call when they actually changed
@@ -145,6 +222,11 @@ public final class HueWorker {
     }
 
     public static Int2IntMap sources(@Nullable PalettedContainer<BlockState> palette) {
+        return sources(palette, null);
+    }
+
+    // rules: ruleSources() for the same section, wins over the plain color
+    public static Int2IntMap sources(@Nullable PalettedContainer<BlockState> palette, @Nullable Int2IntMap rules) {
         Int2IntMap sources = new Int2IntOpenHashMap();
         if (palette == null) {
             return sources;
@@ -154,6 +236,9 @@ public final class HueWorker {
             if (source != 0) {
                 sources.put(i, source);
             }
+        }
+        if (rules != null) {
+            sources.putAll(rules);
         }
         return sources;
     }

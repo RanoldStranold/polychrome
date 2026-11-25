@@ -39,6 +39,9 @@ public final class PolychromeMixinPlugin implements IMixinConfigPlugin {
         if (FabricLoader.getInstance().isModLoaded("sodium")) {
             mixins.add("MixinSodiumConfigBuilder");
         }
+        if (FabricLoader.getInstance().isModLoaded("nvidium")) {
+            mixins.addAll(List.of("MixinNvidiumShaderLoader", "MixinNvidiumShader"));
+        }
         return mixins;
     }
 

@@ -24,6 +24,13 @@ import org.lwjgl.system.MemoryUtil;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import com.mojang.renderpearl.backend.opengl.GlBuffer;
+import org.lwjgl.opengl.GL11C;
+import org.lwjgl.opengl.GL13C;
+import org.lwjgl.opengl.GL30C;
+import org.lwjgl.opengl.GL20C;
+import org.lwjgl.opengl.GL31C;
+import org.lwjgl.opengl.GL41C;
 
 // hue field on the GPU: half res (2x2x2 blocks per cell) texel buffers in a 32^3 section window
 // around the camera. buffer layout must match polychrome.glsl. GUI/items get a header with the
@@ -307,6 +314,16 @@ public final class LightVolume {
         ByteBuffer data = MemoryUtil.memAlloc(HEADER_BYTES);
         try {
             data.putInt(camX).putInt(camY).putInt(camZ).putInt(enabled ? 1 : 0);
+            if (target == this.header) {
+                this.rawCamera[0] = camX;
+                this.rawCamera[1] = camY;
+                this.rawCamera[2] = camZ;
+                this.rawCamera[3] = enabled ? 1 : 0;
+                this.rawParams[0] = (float) (camera.x - camX);
+                this.rawParams[1] = (float) (camera.y - camY);
+                this.rawParams[2] = (float) (camera.z - camZ);
+                this.rawParams[3] = SATURATION;
+            }
             data.putFloat((float) (camera.x - camX)).putFloat((float) (camera.y - camY)).putFloat((float) (camera.z - camZ)).putFloat(SATURATION);
             data.flip();
             encoder.writeToBuffer(target.slice(), data);
@@ -334,6 +351,35 @@ public final class LightVolume {
         Polychrome.LOGGER.info("Light volume created: {} slots, {} MiB", SLOTS, (long) SLOTS * SLOT_BYTES >> 20);
     }
 
+    // raw GL programs (nvidium): header as uniforms at locations 120 / 121, pages and cells on texture units
+    // 13 and 14. must match CL_RAW_GL in polychrome.glsl. puts the active texture unit back for GlStateManager's cache
+    private int rawPages, rawCells;
+    // last world header written, for raw GL
+    private final int[] rawCamera = new int[4];
+    private final float[] rawParams = new float[4];
+
+    public void bindRawGl() {
+        if (!(this.header instanceof GlBuffer) || !(this.pageBuffer instanceof GlBuffer pages)
+                || !(this.cellBuffer instanceof GlBuffer cells)) {
+            return;
+        }
+        if (this.rawPages == 0) {
+            this.rawPages = GL11C.glGenTextures();
+            this.rawCells = GL11C.glGenTextures();
+        }
+        int program = GL11C.glGetInteger(GL20C.GL_CURRENT_PROGRAM);
+        GL41C.glProgramUniform4i(program, 120, this.rawCamera[0], this.rawCamera[1], this.rawCamera[2], this.rawCamera[3]);
+        GL41C.glProgramUniform4f(program, 121, this.rawParams[0], this.rawParams[1], this.rawParams[2], this.rawParams[3]);
+        int previous = GL11C.glGetInteger(GL13C.GL_ACTIVE_TEXTURE);
+        GL13C.glActiveTexture(GL13C.GL_TEXTURE13);
+        GL11C.glBindTexture(GL31C.GL_TEXTURE_BUFFER, this.rawPages);
+        GL31C.glTexBuffer(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_R32I, pages.handle());
+        GL13C.glActiveTexture(GL13C.GL_TEXTURE14);
+        GL11C.glBindTexture(GL31C.GL_TEXTURE_BUFFER, this.rawCells);
+        GL31C.glTexBuffer(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_R32UI, cells.handle());
+        GL13C.glActiveTexture(previous);
+    }
+
     // world = false for anything but the level lightmap, those get the tint-off header
     public void bind(RenderPass pass, boolean world) {
         if (this.header == null) {
@@ -356,6 +402,50 @@ public final class LightVolume {
 
     public int knownSections() {
         return this.sections.size();
+    }
+
+    // render thread. 0xRRGGBB hue at a block's center, brightest channel 255, white where unlit. must match
+    // cl_hue + the saturation mix in polychrome.glsl. reads the cpu copy, so a fresh section counts a frame
+    // before its upload. no allocation
+    public int hueAt(int x, int y, int z) {
+        // cl_hue at the block center: s = (x + 0.5) / 2 - 0.5
+        float sx = x * 0.5f - 0.25f, sy = y * 0.5f - 0.25f, sz = z * 0.5f - 0.25f;
+        int bx = (int) Math.floor(sx), by = (int) Math.floor(sy), bz = (int) Math.floor(sz);
+        float fx = sx - bx, fy = sy - by, fz = sz - bz;
+        float r = 0, g = 0, b = 0;
+        long lastKey = Long.MIN_VALUE;
+        int[] data = null;
+        for (int i = 0; i < 8; i++) {
+            int cx = bx + (i & 1), cy = by + ((i >> 1) & 1), cz = bz + ((i >> 2) & 1);
+            long key = HueField.sectionKey(cx >> 3, cy >> 3, cz >> 3);
+            if (key != lastKey) {
+                lastKey = key;
+                data = this.sections.get(key);
+            }
+            if (data == null) {
+                continue;
+            }
+            int packed = data[((cy & 7) << 6) | ((cz & 7) << 3) | (cx & 7)];
+            if (packed == 0) {
+                continue;
+            }
+            float w = ((i & 1) == 0 ? 1 - fx : fx) * (((i >> 1) & 1) == 0 ? 1 - fy : fy) * (((i >> 2) & 1) == 0 ? 1 - fz : fz);
+            float scale = Math.scalb(w, (packed >>> 27) - 24);
+            r += (packed & 511) * scale;
+            g += ((packed >>> 9) & 511) * scale;
+            b += ((packed >>> 18) & 511) * scale;
+        }
+        float peak = Math.max(r, Math.max(g, b));
+        if (peak <= 0) {
+            return 0xFFFFFF;
+        }
+        // fade to white below CL_PRESENCE, then the saturation mix
+        float presence = Math.min(peak / 1.0e-3f, 1f) * SATURATION;
+        return channel(r / peak, presence) << 16 | channel(g / peak, presence) << 8 | channel(b / peak, presence);
+    }
+
+    private static int channel(float hue, float amount) {
+        return Math.round((1 + (hue - 1) * amount) * 255);
     }
 
     // 0 if no data

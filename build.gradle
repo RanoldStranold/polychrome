@@ -31,6 +31,12 @@ sourceSets {
         compileClasspath += main.compileClasspath + main.output
         runtimeClasspath += main.runtimeClasspath + main.output
     }
+    // Dev-only: the resource pack test suite, separate from the feature check. Every pack feature, written
+    // as real packs and checked in a running game. Run with `gradlew runClientPackTest`.
+    packtest {
+        compileClasspath += main.compileClasspath + main.output
+        runtimeClasspath += main.runtimeClasspath + main.output + testblocks.output
+    }
 }
 
 loom {
@@ -41,10 +47,21 @@ loom {
         "polychrome-testblocks" {
             sourceSet sourceSets.testblocks
         }
+        "polychrome-packtest" {
+            sourceSet sourceSets.packtest
+        }
     }
     runs {
         client {
             source sourceSets.testblocks
+        }
+        // same as the feature check run, with the pack tests in place of the feature tests
+        clientPackTest {
+            inherit loom.runs.clientGameTest
+            configName = "Client Pack Test"
+            source sourceSets.packtest
+            runDir "build/run/clientPackTest"
+            property "fabric.client.gametest.testModResourcesPath", file("src/packtest/resources").absolutePath
         }
     }
 }
@@ -103,6 +120,9 @@ dependencies {
     // Comment out for full game test runs: its workers race the game's structure cache and crash
     // world creation (ConcurrentModificationException in StructureTemplate$Palette.blocks).
     localRuntime("maven.modrinth:voxy-worldgen:FZLopf8z") { transitive = false }
+    // Nvidium: NVIDIA mesh shader terrain in place of Sodium's. Off by default: when on, every test draws through it.
+    // 0.4.4-beta7-26.3 needs exactly Sodium 0.9.2, so swap Sodium too when turning it on.
+    // localRuntime("maven.modrinth:nvidium:8mVK1zbk") { transitive = false }
 
     // Sodium (quality page option) and Mod Menu (fallback settings screen): compiled against, both optional.
     compileOnly "maven.modrinth:sodium:mc26.3-0.9.3-beta.1-fabric"
@@ -134,11 +154,34 @@ dependencies {
             "ok-zoomer:g9ICu3fu",
             // Screencopy: screenshots go to the clipboard too (needs Cloth Config, already above).
             "screencopy:S3BqK7ib",
+            // BetterEnd and BetterNether (new lit blocks in both dimensions), with their libraries.
+            "betterend:Go0dQ8pN",
+            "betternether:josAMKGC",
+            "bclib:FpnxxHRL",
+            "worldweaver:ixihXZiM",
     ].each { localRuntime("maven.modrinth:${it}") { transitive = false } }
 }
 
 test {
     useJUnitPlatform()
+}
+
+// fresh run folder each time (no packs or saves left from the last run), eula like the feature check
+def packTestRunDir = file("build/run/clientPackTest")
+tasks.register("cleanPackTestRun", Delete) {
+    delete packTestRunDir
+}
+tasks.register("acceptPackTestEula") {
+    mustRunAfter "cleanPackTestRun"
+    doLast {
+        packTestRunDir.mkdirs()
+        new File(packTestRunDir, "eula.txt").text = 'eula=true' + System.lineSeparator()
+        // silent: master volume 0 for this suite only
+        new File(packTestRunDir, "options.txt").text = 'soundCategory_master:0.0' + System.lineSeparator()
+    }
+}
+tasks.matching { it.name == "runClientPackTest" }.configureEach {
+    dependsOn "cleanPackTestRun", "acceptPackTestEula"
 }
 
 processResources {

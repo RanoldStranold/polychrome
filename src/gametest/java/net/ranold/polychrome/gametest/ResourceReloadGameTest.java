@@ -75,8 +75,14 @@ public class ResourceReloadGameTest implements FabricClientGameTest {
 
             // per dimension: nether fire is blue, back in the overworld it's green again
             server.runCommand("execute in minecraft:the_nether run tp @a 0.5 100 0.5");
+            // a fixed wait was not enough with Just Like Rays: its first nether load is slow
+            for (int i = 0; i < 600 && !context.computeOnClient(client -> client.level != null
+                    && client.level.dimension().identifier().toString().equals("minecraft:the_nether")); i++) {
+                context.waitTick();
+            }
             context.waitTicks(40);
             int nether = context.computeOnClient(client -> LightColors.sourceOf(Blocks.TORCH.defaultBlockState()) & 0xFFFFFF);
+            String netherSeen = context.computeOnClient(client -> client.level.dimension().identifier().toString());
             // the end's tint: green fire moved toward purple
             server.runCommand("execute in minecraft:the_end run tp @a 0.5 100 0.5");
             context.waitTicks(40);
@@ -86,6 +92,11 @@ public class ResourceReloadGameTest implements FabricClientGameTest {
             if (end != LightColors.mix(GREEN, 0xA050FF, 0.4) || endWhite != LightColors.mix(0xFFFFFF, 0xA050FF, 0.4)) {
                 throw new AssertionError(String.format("end tint: torch %06X, white %06X", end, endWhite));
             }
+            // public api has to show the same tint (Torchlit menus)
+            int apiEnd = context.computeOnClient(client -> net.ranold.polychrome.api.PolychromeApi.itemColor(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.TORCH)));
+            if (apiEnd != end) {
+                throw new AssertionError(String.format("api torch color in the end %06X, world %06X", apiEnd, end));
+            }
             server.runCommand(String.format("execute in minecraft:overworld run tp @a 0.5 %d 0.5", GROUND + 10));
             context.waitTicks(40);
             settle(context);
@@ -93,8 +104,8 @@ public class ResourceReloadGameTest implements FabricClientGameTest {
             System.out.printf("[polychrome-test] reload: torch color in the nether %06X, back in the overworld %06X, floor %s%n",
                     nether, overworld, floor(context));
             if (nether != NETHER_BLUE || overworld != GREEN || LightColors.white() != 0xFFFFFF) {
-                throw new AssertionError(String.format("per dimension color: nether %06X (expected %06X), overworld %06X (expected %06X)",
-                        nether, NETHER_BLUE, overworld, GREEN));
+                throw new AssertionError(String.format("per dimension color: nether %06X (expected %06X, client in %s), overworld %06X (expected %06X)",
+                        nether, NETHER_BLUE, netherSeen, overworld, GREEN));
             }
 
             reloadWith(context, id, true);

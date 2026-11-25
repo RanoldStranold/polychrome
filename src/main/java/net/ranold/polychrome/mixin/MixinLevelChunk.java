@@ -29,9 +29,11 @@ public abstract class MixinLevelChunk {
         if (previous == null || !(this.level instanceof ClientLevel)) {
             return;
         }
-        if (!LightEngine.hasDifferentLightProperties(previous, state) && LightColors.sourceOf(previous) == LightColors.sourceOf(state)) {
-            return;
+        boolean self = LightEngine.hasDifferentLightProperties(previous, state) || LightColors.sourceOf(previous) != LightColors.sourceOf(state)
+                || LightColors.hasRules(state);
+        // with rules a plain block can still change a neighboring light's color
+        if (self || LightColors.anyRules()) {
+            Polychrome.blockChanged(pos, state, self);
         }
-        Polychrome.blockChanged(pos, state);
     }
 }
